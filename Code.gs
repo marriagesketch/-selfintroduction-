@@ -14,7 +14,7 @@
  *   SPREADSHEET_ID  : このスプレッドシートのID（URLの /d/ と /edit の間の文字列）
  *   AES_KEY_B64     : generateSecrets_() を実行してログに出た値を貼る
  *   HASH_SALT       : generateSecrets_() を実行してログに出た値を貼る
- *   LIFF_CHANNEL_ID : LIFF IDの「-」より前の数字部分（例 "2010606389-v29ZSV0f" なら "2010606389"）
+ *   LIFF_CHANNEL_ID : 2010637619
  *
  * デプロイ：[デプロイ]→[新しいデプロイ]→種類「ウェブアプリ」
  *   実行するユーザー：自分
@@ -137,7 +137,7 @@ function hmacHex_(text) {
    ------------------------------------------------------------ */
 function verifyLineIdToken_(idToken) {
   if (!idToken) throw new Error('idTokenがありません');
-  var channelId = PropertiesService.getScriptProperties().getProperty('LIFF_CHANNEL_ID');
+  var channelId = PropertiesService.getScriptProperties().getProperty('2010637619');
   if (!channelId) throw new Error('スクリプトプロパティ LIFF_CHANNEL_ID が未設定です。');
 
   var resp = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
