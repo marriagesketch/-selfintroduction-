@@ -10,7 +10,7 @@
    最新の状態に更新する（＝一度送ったリンクは編集後も有効）。
    ============================================================ */
 
-const LIFF_ID = "2010606389-v29ZSV0f";
+const LIFF_ID = "2010637619-80kXRKZ0";
 const STORAGE_KEY = "life_story_draft_v3";
 const PX_PER_MIN = 2; // 2px/分 で比例タイムライン描画
 
