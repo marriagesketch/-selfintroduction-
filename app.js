@@ -18,7 +18,7 @@ const SHARE_VIEW_PENDING_KEY = "life_story_shared_view_pending_v1";
 const PX_PER_MIN = 2; // 2px/分 で比例タイムライン描画
 
 // ▼▼▼ デプロイ済みGAS Web AppのURL ▼▼▼
-const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx5WGcdJTouhHJRSBIKDPVKYw4lODtSo-MtGHnLWctusDWcOe4jGdf4Th_-ZAZu9ZtBLg/exec";
+const GAS_ENDPOINT = "https://script.google.com/macros/s/18EsNFzS77rYcL1jGiGJ-JtOCCcyDGO1dVh9FSCUJjg4/exec";
 
 /* ---- カテゴリ ---- */
 const CATEGORY_LIST = [
