@@ -24,7 +24,7 @@
    ============================================================ */
 
 var SPREADSHEET_ID = '18EsNFzS77rYcL1jGiGJ-JtOCCcyDGO1dVh9FSCUJjg4';
-var SHEET_NAME      = 'sheet';
+var SHEET_NAME      = 'Shares';
 var SCHEMA_VERSION  = 1;
 
 // シートの列番号（1-indexed）
