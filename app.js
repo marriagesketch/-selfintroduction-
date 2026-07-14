@@ -1143,7 +1143,7 @@ function bindEvents(){
      画像は1MB以下を推奨。PNGの透過部分はそのまま送ると
      反映されない場合があるため、白背景に合成したJPEGを使用する。
    ============================================================ */
-const HEADER_IMAGE_URL = "https://liffdevelop31257014-gif.github.io/-selfintroduction-1/image_message.jpg";
+const HEADER_IMAGE_URL = "https://liffdevelop31257014-gif.github.io/-selfintroduction/image_message.jpg";
 
 function buildShareFlexMessage(name, shareURL){
   const nameLine = name ? `${name}さんの自分史・トリセツが届きました` : "自分史・トリセツが届きました";
