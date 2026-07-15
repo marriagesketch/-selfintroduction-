@@ -632,8 +632,8 @@ async function publishAndShare(shareName){
   const shareURL = `${getFormBaseURL()}?id=${shareInfo.id}#${shareInfo.key}`;
   const name = (shareName||"").trim();
   const previewMsg = name
-    ? `${name}さんの婚活 自己紹介が届きました。\n回答をみる→${shareURL}`
-    : `婚活 自己紹介が届きました。\n回答をみる→${shareURL}`;
+    ? `${name}さんの婚活プロフィールが届きました。\n回答をみる→${shareURL}`
+    : `婚活プロフィールが届きました。\n回答をみる→${shareURL}`;
 
   return { shareURL, previewMsg, flexMessage: buildShareFlexMessage(name, shareURL) };
 }
@@ -1146,7 +1146,7 @@ function bindEvents(){
 const HEADER_IMAGE_URL = "https://liffdevelop31257014-gif.github.io/-selfintroduction/image_message.jpg";
 
 function buildShareFlexMessage(name, shareURL){
-  const nameLine = name ? `${name}さんの自分史・トリセツが届きました` : "自分史・トリセツが届きました";
+  const nameLine = name ? `${name}さんの婚活プロフィールが届きました` : "婚活プロフィールが届きました";
 
   return {
     type: "flex",
@@ -1182,7 +1182,7 @@ function buildShareFlexMessage(name, shareURL){
             style: "primary",
             height: "sm",
             color: "#f48ca0",
-            action: { type: "uri", label: "見てみる", uri: shareURL }
+            action: { type: "uri", label: "回答をみる", uri: shareURL }
           }
         ]
       }
