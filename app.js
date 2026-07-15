@@ -1146,7 +1146,7 @@ function bindEvents(){
 const HEADER_IMAGE_URL = "https://liffdevelop31257014-gif.github.io/-selfintroduction/image_message.jpg";
 
 function buildShareFlexMessage(name, shareURL){
-  const nameLine = name ? `${name}さんの婚活プロフィールが届きました` : "婚活プロフィールが届きました";
+  const nameLine = name ? `${name}さんの婚活プロフィールが届きました` : "回答が届きました";
 
   return {
     type: "flex",
