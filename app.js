@@ -632,8 +632,8 @@ async function publishAndShare(shareName){
   const shareURL = `${getFormBaseURL()}?id=${shareInfo.id}#${shareInfo.key}`;
   const name = (shareName||"").trim();
   const previewMsg = name
-    ? `${name}さんの自分史・トリセツが届きました。\n見てみる→${shareURL}`
-    : `自分史・トリセツが届きました。\n見てみる→${shareURL}`;
+    ? `${name}さんの婚活 自己紹介が届きました。\n回答を見る→${shareURL}`
+    : `婚活 自己紹介が届きました。\n回答を見る→${shareURL}`;
 
   return { shareURL, previewMsg, flexMessage: buildShareFlexMessage(name, shareURL) };
 }
