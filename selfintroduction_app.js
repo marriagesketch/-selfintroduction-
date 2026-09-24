@@ -67,6 +67,43 @@ function escapeHTML(str){
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+/* ------------------------------------------------------------
+   スクショ抑止用ウォーターマーク
+   ------------------------------------------------------------
+   スクリーンショットの撮影自体は検知・ブロックできないため、
+   「撮られても誰が・いつ見た画面かが写り込む」ようにし、
+   無断転載・拡散への心理的な抑止力として機能させる。
+   ------------------------------------------------------------ */
+function buildWatermarkSVG(lines){
+  const tileW = 240, tileH = 140;
+  const lineHeight = 16;
+  const startY = tileH / 2 - ((lines.length - 1) * lineHeight) / 2;
+
+  const textEls = lines.map((line, i) => {
+    const y = startY + i * lineHeight;
+    return `<text x="0" y="${y}" font-size="12" font-family="sans-serif" ` +
+           `fill="rgba(0,0,0,0.1)" transform="rotate(-28 ${tileW / 2} ${tileH / 2})">${escapeHTML(line)}</text>`;
+  }).join("");
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tileW}" height="${tileH}">${textEls}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function showScreenshotWatermark(viewerHash){
+  const el = document.getElementById("screenshotWatermark");
+  if(!el) return;
+  const stamp = new Date().toLocaleString("ja-JP", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  });
+  const lines = [
+    "スクショ・転載禁止",
+    `${viewerHash.slice(0, 8)}  ${stamp}`,
+  ];
+  el.style.backgroundImage = `url("${buildWatermarkSVG(lines)}")`;
+  el.classList.add("show");
+}
+
 /* ============================================================
    Base64URL 変換ユーティリティ（AES鍵・暗号文の符号化に使用）
    ============================================================ */
@@ -729,6 +766,7 @@ async function handleSharedView(id, keyBase64){
   }
 
   renderPublicView(data);
+  showScreenshotWatermark(viewerHash);
 }
 
 /* ============================================================
