@@ -648,8 +648,8 @@ async function publishAndShare(shareName){
   const shareURL = `${getFormBaseURL()}?id=${shareInfo.id}#${shareInfo.key}`;
   const name = (shareName||"").trim();
   const previewMsg = name
-    ? `${name}さんの婚活プロフィールが届きました。\n回答をみる→${shareURL}`
-    : `婚活プロフィールが届きました。\n回答をみる→${shareURL}`;
+    ? `${name}さんの恋活・婚活プロフィールが届きました。\n回答をみる→${shareURL}`
+    : `恋活・婚活プロフィールが届きました。\n回答をみる→${shareURL}`;
 
   return { shareURL, previewMsg, flexMessage: buildShareFlexMessage(name, shareURL) };
 }
@@ -1162,11 +1162,11 @@ function bindEvents(){
 const SHARETARGETPICKER_IMAGE_URL = "https://marriagesketch.github.io/-selfintroduction-/sharetargetpicker.jpg";
 
 function buildShareFlexMessage(name, shareURL){
-  const nameLine = name ? `${name}さんの婚活プロフィールが届きました` : "回答が届きました";
+  const nameLine = name ? `${name}さんの恋活・婚活プロフィールが届きました` : "回答が届きました";
 
   return {
     type: "flex",
-    altText: `婚活プロフィール - ${nameLine}`,
+    altText: `恋活・婚活プロフィール - ${nameLine}`,
     contents: {
       type: "bubble",
       hero: {
@@ -1182,7 +1182,7 @@ function buildShareFlexMessage(name, shareURL){
         spacing: "md",
         paddingAll: "20px",
         contents: [
-          { type: "text", text: "婚活プロフィール", size: "xs", weight: "bold", color: "#d96c7d" },
+          { type: "text", text: "恋活・婚活プロフィール", size: "xs", weight: "bold", color: "#d96c7d" },
           { type: "text", text: nameLine, size: "lg", weight: "bold", wrap: true, margin: "sm" },
           { type: "text", text: "ボタンから内容を確認できます。", size: "sm", color: "#888888", wrap: true, margin: "md" }
         ]
@@ -1263,7 +1263,7 @@ async function checkFriendship(){
 
 /* ============================================================
    複数アプリ一括下書き移行チェーン 受け取り処理
-   （婚活すり合わせシリーズ 5サイト共通スニペット。中身は全サイト同一）
+   （恋活・婚活すり合わせシリーズ 5サイト共通スニペット。中身は全サイト同一）
    ============================================================ */
 (function () {
   const params = new URLSearchParams(location.search);
