@@ -3,6 +3,8 @@
    スプレッドシートID: 18EsNFzS77rYcL1jGiGJ-JtOCCcyDGO1dVh9FSCUJjg4
    ------------------------------------------------------------
    ・シート「sheet」のみ作成（Analyticsシートは作成しない）
+   ・Drafts    シート : 回答フォームの下書き（クライアント側で暗号化済み。
+                        ユーザー本人のLINE IDでしか復号できない）。初回保存時に自動作成
    ------------------------------------------------------------
    共有リンクの扱い（ハイブリッド方式）:
    ・まだ誰にも開かれていない間は、同じid・同じリンクのまま
@@ -33,6 +35,12 @@ var COL = {
 };
 
 var DATA_START_ROW = 2; // 1行目=見出し, 2行目以降がデータ
+
+// Drafts シート（下書きのクラウド保存）。1人（ownerHash）につき1行。
+var DRAFTS_SHEET = 'Drafts';
+var DCOL = { OWNER_HASH: 1, CIPHER_TEXT: 2, SAVED_AT: 3, UPDATED_AT: 4 };
+var DRAFT_MAX_CIPHER_LENGTH = 40000; // セルの上限(50,000文字)に対する余裕
+var DRAFT_DATE_FORMAT = 'yyyy/MM/dd HH:mm:ss'; // savedAt / updatedAt 列の表示形式
 
 /* ------------------------------------------------------------
    真剣交際パートナー機能連携（Partners中央API）
@@ -92,6 +100,9 @@ function doGet(e) {
     if (action === 'view') {
       return handleView(e.parameter.id, e.parameter.viewerHash);
     }
+    if (action === 'loadDraft') {
+      return handleLoadDraft(e.parameter.ownerHash);
+    }
     return jsonResponse({ ok: false, reason: 'invalid_action' });
   } catch (err) {
     return jsonResponse({ ok: false, reason: 'server_error', message: String(err) });
@@ -103,6 +114,9 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     if (body.action === 'share') {
       return handleShare(body);
+    }
+    if (body.action === 'saveDraft') {
+      return handleSaveDraft(body);
     }
     return jsonResponse({ ok: false, reason: 'invalid_action' });
   } catch (err) {
@@ -118,6 +132,10 @@ function jsonResponse(obj) {
 
 function getSheet() {
   return SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
+}
+
+function getSpreadsheet() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
 
@@ -274,10 +292,93 @@ function handleView(id, viewerHash) {
     var viewCountCell = sheet.getRange(rowIndex, COL.VIEW_COUNT);
     viewCountCell.setValue((Number(viewCountCell.getValue()) || 0) + 1);
 
-    return jsonResponse({ ok: true, cipherText: cipherText });
+    // isOwner: 閲覧者が共有を作成した本人かどうか。本人が自分の共有リンクから
+    // 送信済みの回答を下書きに戻す機能（app.js側）で使う。
+    return jsonResponse({ ok: true, cipherText: cipherText, isOwner: (viewerHash === ownerHash) });
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ------------------------------------------------------------
+   下書きのクラウド保存（Drafts シート）
+   ・cipherText はクライアント側で「LINEユーザーID由来の鍵」を使い
+     AES-GCM 暗号化済み。サーバー（および管理者）は復号できない。
+     （サーバーが持つ ownerHash はユーザーIDのSHA-256であり、そこから
+       暗号鍵は導出できない）
+   ・1人（ownerHash）につき1行。保存のたびに同じ行を上書きする。
+   ・savedAt はクライアント側の時刻（ミリ秒）。端末側の下書きとの新旧
+     比較に使う。シート上では見やすいよう日時（Date）として保存し、
+     返す時にミリ秒の数値へ戻す（旧形式の数値のままの行も読める）。
+   ------------------------------------------------------------ */
+function handleSaveDraft(body) {
+  var ownerHash  = body.ownerHash;
+  var cipherText = body.cipherText;
+  var savedAt    = Number(body.savedAt);
+  if (!isFinite(savedAt) || savedAt <= 0) savedAt = Date.now();
+
+  if (typeof ownerHash !== 'string' || !/^[0-9a-f]{64}$/.test(ownerHash) ||
+      typeof cipherText !== 'string' || !cipherText) {
+    return jsonResponse({ ok: false, reason: 'invalid_params' });
+  }
+  if (cipherText.length > DRAFT_MAX_CIPHER_LENGTH) {
+    return jsonResponse({ ok: false, reason: 'too_large' });
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName(DRAFTS_SHEET);
+    if (!sheet) {
+      sheet = ss.insertSheet(DRAFTS_SHEET);
+      sheet.appendRow(['ownerHash', 'cipherText', 'savedAt', 'updatedAt']);
+    }
+    var rowValues = [ownerHash, cipherText, new Date(savedAt), new Date()];
+    var targetRow = findDraftRowByOwnerHash(sheet, ownerHash);
+    if (targetRow) {
+      sheet.getRange(targetRow, 1, 1, rowValues.length).setValues([rowValues]);
+    } else {
+      sheet.appendRow(rowValues);
+      targetRow = sheet.getLastRow();
+    }
+    // savedAt / updatedAt を同じ日時形式で表示（旧形式の数値セルが残っていても揃う）
+    sheet.getRange(targetRow, DCOL.SAVED_AT, 1, 2).setNumberFormat(DRAFT_DATE_FORMAT);
+    return jsonResponse({ ok: true, savedAt: savedAt });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleLoadDraft(ownerHash) {
+  if (typeof ownerHash !== 'string' || !/^[0-9a-f]{64}$/.test(ownerHash)) {
+    return jsonResponse({ ok: false, reason: 'invalid_params' });
+  }
+  var sheet = getSpreadsheet().getSheetByName(DRAFTS_SHEET);
+  if (!sheet) return jsonResponse({ ok: false, reason: 'not_found' });
+
+  var targetRow = findDraftRowByOwnerHash(sheet, ownerHash);
+  if (!targetRow) return jsonResponse({ ok: false, reason: 'not_found' });
+
+  var row = sheet.getRange(targetRow, 1, 1, DCOL.UPDATED_AT).getValues()[0];
+  var savedAtCell = row[DCOL.SAVED_AT - 1];
+  var savedAt = (savedAtCell instanceof Date) ? savedAtCell.getTime() : (Number(savedAtCell) || 0);
+  return jsonResponse({
+    ok: true,
+    cipherText: String(row[DCOL.CIPHER_TEXT - 1]),
+    savedAt: savedAt
+  });
+}
+
+/* Drafts シート上で ownerHash が一致する行を探す（見つからなければ null） */
+function findDraftRowByOwnerHash(sheet, ownerHash) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START_ROW) return null;
+  var values = sheet.getRange(DATA_START_ROW, 1, lastRow - DATA_START_ROW + 1, DCOL.OWNER_HASH).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][DCOL.OWNER_HASH - 1] === ownerHash) return DATA_START_ROW + i;
+  }
+  return null;
 }
 
 /* id (A列) からデータ行番号を探す。見つからなければ null */

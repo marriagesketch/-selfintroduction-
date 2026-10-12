@@ -15,6 +15,10 @@ const LIFF_ID = "2010312230-3gcd1xq6";
 const DRAFT_KEY = "konkatsu_selfintroduction_draft";
 const SHARE_INFO_KEY = "konkatsu_selfintroduction_share";
 const SHARE_VIEW_PENDING_KEY = "konkatsu_selfintroduction_shared_view_pending";
+// 「クリア」した時刻。これ以前のクラウド下書きは自動復元しない（意図的な削除を尊重するため）
+const DRAFT_CLEARED_AT_KEY = "konkatsu_selfintroduction_draft_cleared_at";
+// クラウド下書きの暗号鍵導出用（LINEユーザーIDと組み合わせる）。変更すると過去のクラウド下書きは復号できなくなる
+const DRAFT_CRYPTO_SALT = "konkatsu_selfintroduction_draft_key_v1:";
 const PX_PER_MIN = 2; // 2px/分 で比例タイムライン描画
 
 // ▼▼▼ デプロイ済みGAS Web AppのURL ▼▼▼
@@ -513,18 +517,65 @@ function collectTorisetsu(){
 }
 
 /* ============================================================
-   下書き保存／復元
+   下書き：二段構え
+   ① 自動保存 … 入力のたびに端末（localStorage）へ保存（従来どおり）
+   ② 「クラウドに保存」ボタン … 端末 ＋ クラウド（GAS）へ保存
+   端末のデータが消えても、クラウド側から自動復元する。
+   クラウド側は「LINEユーザーID由来の鍵」で暗号化してから送るため、
+   サーバー側では内容を読めない。
+   ※共有用の id・鍵（SHARE_INFO_KEY）は従来どおり端末にのみ保存する
+     （クラウドには送らない）。
    ============================================================ */
+
+/* 画面の現在の内容を下書き形式で集める */
+function currentDraftData(){
+  return {
+    profile:   collectProfile(),
+    cards:     collectCards(),
+    torisetsu: collectTorisetsu(),
+    schedule:  schedulePatterns,
+    createdAt,
+  };
+}
+
+/* 入力が空（初期状態）かどうか。空の状態で既存の下書きを上書きしないために使う。
+   ※初期カード（カテゴリ・年齢だけ入っているもの）は「空」として扱う */
+function isBlankDraftData(d){
+  if(!d) return true;
+  const p=d.profile||{};
+  if([p.name,p.age,p.birthdate].some(v=>String(v||"").trim()!=="")) return false;
+  if(Object.values(d.torisetsu||{}).some(v=>String(v||"").trim()!=="")) return false;
+  if((d.schedule||[]).some(pt=>pt&&pt.slots&&pt.slots.length>0)) return false;
+  const cardKeys=["categoryName","orgName","livedPlace","hobby","lessons","bestMemory","onePhrase"];
+  if((d.cards||[]).some(c=>cardKeys.some(key=>String((c&&c[key])||"").trim()!==""))) return false;
+  return true;
+}
+
+/* ----- 端末（localStorage） ----- */
+function readLocalDraft(){
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY); if(!raw) return null;
+    const data=JSON.parse(raw);
+    return { data, savedAt: Number(data.savedAt)||0 }; // 旧形式は savedAt なし → 0
+  }catch(e){ console.warn("local draft read failed",e); return null; }
+}
+function writeLocalDraft(data,savedAt=Date.now()){
+  try{ localStorage.setItem(DRAFT_KEY,JSON.stringify({...data,savedAt})); return true; }
+  catch(e){ console.warn("local draft write failed",e); return false; }
+}
+function getDraftClearedAt(){
+  try{ return Number(localStorage.getItem(DRAFT_CLEARED_AT_KEY))||0; }catch(_){ return 0; }
+}
+function setDraftClearedAt(ts){
+  try{ localStorage.setItem(DRAFT_CLEARED_AT_KEY,String(ts)); }catch(_){}
+}
+
+/* 自動保存（端末）。入力が空の状態では保存しない */
 function saveDraft(){
   try{
-    localStorage.setItem(DRAFT_KEY,JSON.stringify({
-      profile:   collectProfile(),
-      cards:     collectCards(),
-      torisetsu: collectTorisetsu(),
-      schedule:  schedulePatterns,
-      createdAt,
-    }));
-    flashSaved();
+    const data=currentDraftData();
+    if(isBlankDraftData(data)) return;
+    if(writeLocalDraft(data)) flashSaved();
   }catch(e){ console.warn("draft save failed",e); }
 }
 function flashSaved(){
@@ -532,34 +583,182 @@ function flashSaved(){
   b.classList.add("just-saved"); setTimeout(()=>b.classList.remove("just-saved"),400);
 }
 
+/* 下書きデータを画面に反映する（端末・クラウド共通）。戻り値: 内容があるか */
+function applyDraftData(data){
+  document.getElementById("cardList").innerHTML="";
+  document.getElementById("profileName").value      = data.profile?.name      ||"";
+  document.getElementById("profileAge").value        = data.profile?.age       ||"";
+  document.getElementById("profileBirthdate").value  = data.profile?.birthdate ||"";
+  createdAt=data.createdAt||null;
+  (data.cards||[]).forEach(c=>renderCard(createCardData(c)));
+  const ts=data.torisetsu||{};
+  TORISETSU_QUESTIONS.forEach(q=>{ const el=document.getElementById(q.id); if(el) el.value=ts[q.id]||""; });
+  /* スケジュール: スロットにIDが無い場合は補完 */
+  schedulePatterns=(data.schedule||[]).map(p=>({
+    ...p,
+    id: p.id||generateId(),
+    slots: (p.slots||[]).map(s=>({...s,id:s.id||generateId()})),
+  }));
+  if(schedulePatterns.length===0){
+    schedulePatterns=[
+      createPattern({id:"work",    name:"仕事の日",sublabel:"平日の平均",    slots:[]}),
+      createPattern({id:"holiday", name:"休日",    sublabel:"平均的な1日", slots:[]}),
+    ];
+  }
+  activePatternId=schedulePatterns[0]?.id||null;
+  return (data.cards&&data.cards.length>0)||!!(data.profile?.name)||
+         Object.values(ts).some(v=>v!=="")||
+         schedulePatterns.some(p=>p.slots.length>0);
+}
+
 function loadDraft(){
   try{
-    const raw=localStorage.getItem(DRAFT_KEY); if(!raw) return false;
-    const data=JSON.parse(raw);
-    document.getElementById("profileName").value      = data.profile?.name      ||"";
-    document.getElementById("profileAge").value        = data.profile?.age       ||"";
-    document.getElementById("profileBirthdate").value  = data.profile?.birthdate ||"";
-    createdAt=data.createdAt||null;
-    (data.cards||[]).forEach(c=>renderCard(createCardData(c)));
-    const ts=data.torisetsu||{};
-    TORISETSU_QUESTIONS.forEach(q=>{ const el=document.getElementById(q.id); if(el) el.value=ts[q.id]||""; });
-    /* スケジュール: スロットにIDが無い場合は補完 */
-    schedulePatterns=(data.schedule||[]).map(p=>({
-      ...p,
-      id: p.id||generateId(),
-      slots: (p.slots||[]).map(s=>({...s,id:s.id||generateId()})),
-    }));
-    if(schedulePatterns.length===0){
-      schedulePatterns=[
-        createPattern({id:"work",    name:"仕事の日",sublabel:"平日の平均",    slots:[]}),
-        createPattern({id:"holiday", name:"休日",    sublabel:"平均的な1日", slots:[]}),
-      ];
-    }
-    activePatternId=schedulePatterns[0]?.id||null;
-    return (data.cards&&data.cards.length>0)||!!(data.profile?.name)||
-           Object.values(ts).some(v=>v!=="")||
-           schedulePatterns.some(p=>p.slots.length>0);
+    const local=readLocalDraft(); if(!local) return false;
+    return applyDraftData(local.data);
   }catch(e){ console.warn("draft load failed",e); return false; }
+}
+
+/* ----- クラウド（GAS） ----- */
+function fetchWithTimeout(url, options = {}, ms = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
+// 鍵は「ソルト＋LINEユーザーID」のSHA-256。サーバーが持つのはユーザーIDのハッシュ（ownerHash）だけで、
+// この鍵は導出できない。
+async function getDraftCryptoKey(userId) {
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(DRAFT_CRYPTO_SALT + userId));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function saveCloudDraft(data, savedAt = Date.now()) {
+  const userId     = getLineUserId();
+  const ownerHash  = await sha256Hex(userId);
+  const key        = await getDraftCryptoKey(userId);
+  const cipherText = await encryptJSON(data, key);
+
+  const resp = await fetchWithTimeout(GAS_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" }, // preflight回避
+    body: JSON.stringify({ action: "saveDraft", ownerHash, cipherText, savedAt, schemaVersion: 1 }),
+  });
+  const result = await resp.json();
+  if (!result.ok) throw new Error(result.reason || "save_draft_failed");
+  return savedAt;
+}
+
+async function loadCloudDraft() {
+  const userId    = getLineUserId();
+  const ownerHash = await sha256Hex(userId);
+  const key       = await getDraftCryptoKey(userId);
+
+  const url  = `${GAS_ENDPOINT}?action=loadDraft&ownerHash=${encodeURIComponent(ownerHash)}`;
+  const resp = await fetchWithTimeout(url, { method: "GET" });
+  const result = await resp.json();
+  if (!result.ok) {
+    if (result.reason === "not_found") return null;
+    throw new Error(result.reason || "load_draft_failed");
+  }
+  const data = await decryptJSON(result.cipherText, key);
+  return { data, savedAt: Number(result.savedAt) || 0 };
+}
+
+/* ----- 起動時：クラウドの下書きを確認して必要なら復元（画面表示はブロックしない） ----- */
+async function syncCloudDraft(localSavedAt,onRestored){
+  let cloud;
+  try{
+    cloud=await loadCloudDraft();
+  }catch(e){ console.warn("cloud draft load skipped:",e); return; }
+  if(!cloud||isBlankDraftData(cloud.data)) return;
+  if(cloud.savedAt<=getDraftClearedAt()) return; // クリア済み
+
+  const current=currentDraftData();
+  const restore=()=>{
+    applyDraftData(cloud.data);
+    writeLocalDraft(cloud.data,cloud.savedAt);
+    if(typeof onRestored==="function") onRestored();
+  };
+
+  // 端末側が空（端末のデータが消えた／新しい端末）→ 自動で復元
+  if(isBlankDraftData(current)){ restore(); return; }
+
+  // 端末側にも入力あり。クラウドの方が新しく、内容も違う場合だけ確認する
+  if(cloud.savedAt>localSavedAt+1000 && JSON.stringify(cloud.data)!==JSON.stringify(current)){
+    if(confirm("クラウドに、この端末より新しい下書きが保存されています。読み込みますか？\n（読み込むと、いま画面にある入力内容は置き換わります）")){
+      restore();
+    }
+  }
+}
+
+/* ----- 「クラウドに保存」ボタン（HTMLに #cloudDraftBtn があればそれを使い、無ければ設定タブに自動で追加） ----- */
+function setupCloudDraftButton(){
+  let btn=document.getElementById("cloudDraftBtn");
+  if(!btn){
+    const resetBtn=document.getElementById("resetBtn");
+    if(!resetBtn||!resetBtn.parentNode) return;
+    btn=document.createElement("button");
+    btn.type="button"; btn.id="cloudDraftBtn"; btn.className="btn-primary";
+    btn.textContent="下書きをクラウドに保存";
+    btn.style.cssText="width:100%;margin-bottom:12px;";
+    resetBtn.parentNode.insertBefore(btn,resetBtn);
+  }
+  btn.addEventListener("click",async()=>{
+    const data=currentDraftData();
+    if(isBlankDraftData(data)){ alert("入力内容がまだありません。"); return; }
+
+    const savedAt=Date.now();
+    const localOk=writeLocalDraft(data,savedAt);
+
+    const originalLabel=btn.textContent;
+    btn.disabled=true; btn.textContent="保存中…";
+    try{
+      await saveCloudDraft(data,savedAt);
+      alert(localOk
+        ? "下書きを保存しました。\n（この端末とクラウドの両方に保存されています）"
+        : "クラウドに下書きを保存しました。\n（この端末への保存は失敗しました）");
+    }catch(e){
+      console.warn("cloud draft save failed:",e);
+      alert(localOk
+        ? "この端末には保存しましたが、クラウドへの保存に失敗しました。\n通信環境を確認して、もう一度お試しください。"
+        : "下書きの保存に失敗しました。通信環境を確認して、もう一度お試しください。");
+    }finally{
+      btn.disabled=false; btn.textContent=originalLabel;
+    }
+  });
+}
+
+/* ----- 自分が共有したリンクを開いた時：その内容を下書きとして復元する -----
+   共有リンクには id と復号鍵が含まれているため、同時に共有情報（id・鍵）も
+   端末に復元する。復元後は、同じリンクのまま内容を更新し続けられる。
+   ※共有データに生年月日は含まれないため、復元後は入力し直しが必要。 */
+function addOwnerRestoreCard(shared,id,keyBase64){
+  const pv=document.getElementById("publicView"); if(!pv) return;
+  const card=document.createElement("div");
+  card.className="cta-card";
+  card.innerHTML=`
+    <p class="cta-title">あなたが作成したプロフィールです</p>
+    <p class="cta-text">この内容を自分の下書きとして復元できます。復元すると、このリンクのまま内容を更新し続けられます。</p>
+    <button type="button" class="btn-primary cta-btn" id="restoreDraftBtn">下書きとして復元する</button>`;
+  pv.insertBefore(card,pv.firstChild);
+  card.querySelector("#restoreDraftBtn").addEventListener("click",()=>restoreDraftFromShared(shared,id,keyBase64));
+}
+
+async function restoreDraftFromShared(shared,id,keyBase64){
+  if(!confirm("この内容を、自分の下書きとして復元します。\n現在保存されている下書きは上書きされます。よろしいですか？")) return;
+  const draft={
+    profile:   { name:shared.profile?.name||"", age:shared.profile?.age||"", birthdate:"" },
+    cards:     shared.cards||[],
+    torisetsu: shared.torisetsu||{},
+    schedule:  shared.schedule||[],
+    createdAt: shared.createdAt||null,
+  };
+  const savedAt=Date.now();
+  writeLocalDraft(draft,savedAt);
+  saveShareInfo({ id, key: keyBase64 });
+  try{ await saveCloudDraft(draft,savedAt); }catch(e){ console.warn("cloud save during restore failed:",e); }
+  alert("下書きとして復元しました。作成画面を開きます。");
+  location.href=getFormBaseURL();
 }
 
 /* ============================================================
@@ -644,6 +843,9 @@ async function publishAndShare(shareName){
   // 鍵は変更しない（同じ鍵をそのまま使い回す）。
   shareInfo = { id: result.id, key: shareInfo.key };
   saveShareInfo(shareInfo);
+
+  // 共有に成功した内容を、クラウドの下書きにも保存しておく（失敗しても共有処理は止めない）。
+  saveCloudDraft(currentDraftData()).catch(e=>console.warn("cloud draft save after share failed:",e));
 
   const shareURL = `${getFormBaseURL()}?id=${shareInfo.id}#${shareInfo.key}`;
   const name = (shareName||"").trim();
@@ -766,6 +968,8 @@ async function handleSharedView(id, keyBase64){
   }
 
   renderPublicView(data);
+  // GAS側が isOwner: true を返した場合（閲覧者＝共有を作成した本人）のみ、下書き復元カードを出す
+  if(result.isOwner===true) addOwnerRestoreCard(data,id,keyBase64);
   showScreenshotWatermark(viewerHash);
 }
 
@@ -1142,6 +1346,7 @@ function bindEvents(){
     if(!confirm("下書きを削除して最初から作成しますか？この操作は取り消せません。")) return;
     try{ localStorage.removeItem(DRAFT_KEY); }catch(_){}
     try{ localStorage.removeItem(SHARE_INFO_KEY); }catch(_){}
+    setDraftClearedAt(Date.now()); // 意図的な削除。これ以前のクラウド下書きは自動復元しない
     location.href=getFormBaseURL();
   });
 
@@ -1262,53 +1467,9 @@ async function checkFriendship(){
 }
 
 /* ============================================================
-   複数アプリ一括下書き移行チェーン 受け取り処理
-   （恋活・婚活すり合わせシリーズ 5サイト共通スニペット。中身は全サイト同一）
-   ============================================================ */
-(function () {
-  const params = new URLSearchParams(location.search);
-  if (params.get("migrate") !== "1" || !location.hash) return;
-
-  window.__migrationInProgress = true;
-
-  try {
-    const idx = parseInt(params.get("idx") || "0", 10);
-    const encoded = location.hash.slice(1);
-    const binary = atob(encoded.replace(/-/g, "+").replace(/_/g, "/"));
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-    const chain = JSON.parse(new TextDecoder().decode(bytes));
-
-    const item = chain[idx];
-    if (item && item.value != null) {
-      localStorage.setItem(item.draftKey, item.value);
-    }
-
-    const next = chain[idx + 1];
-    if (next) {
-      // まだ移行先が残っている → 次のサイトへ自動遷移
-      location.href = `${next.targetOrigin}?migrate=1&idx=${idx + 1}#${encoded}`;
-    } else {
-      // チェーンの最後 = 全件移行完了
-      alert("下書きデータの移行がすべて完了しました。");
-      history.replaceState(null, "", location.origin + location.pathname);
-      window.__migrationInProgress = false;
-    }
-  } catch (e) {
-    console.error("draft migration failed", e);
-    alert("下書きデータの移行中にエラーが発生しました。お手数ですが運営までご連絡ください。");
-    history.replaceState(null, "", location.origin + location.pathname);
-    window.__migrationInProgress = false;
-  }
-})();
-
-/* ============================================================
    メイン処理
    ============================================================ */
 (async()=>{
-  // 移行チェーンの転送中（次サイトへの中継のみ）は、
-  // 通常のLIFF初期化・アプリ本処理を一切実行しない
-  if (window.__migrationInProgress) return;
-
   const params = new URLSearchParams(location.search);
   let sharedId  = params.get("id");
   let keyBase64 = location.hash ? location.hash.slice(1) : "";
@@ -1341,7 +1502,8 @@ async function checkFriendship(){
      先に進める（fire-and-forget）。 */
   checkFriendship();
 
-  const hadDraft=loadDraft();
+  let hadDraft=loadDraft();
+  const localSavedAt=(readLocalDraft()||{}).savedAt||0;
 
   /* スケジュールの初期データが無ければデフォルト2パターン設定 */
   if(schedulePatterns.length===0){
@@ -1353,6 +1515,12 @@ async function checkFriendship(){
   }
 
   bindEvents();
+
+  // 画面を離れる／アプリがバックグラウンドに回る時にも即時に端末へ保存する
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") saveDraft(); });
+  window.addEventListener("pagehide",saveDraft);
+
+  setupCloudDraftButton();
 
   const startBtn =document.getElementById("startBtn");
   const resumeBtn=document.getElementById("resumeBtn");
@@ -1380,9 +1548,18 @@ async function checkFriendship(){
       createdAt=null;
       try{ localStorage.removeItem(DRAFT_KEY); }catch(_){}
       try{ localStorage.removeItem(SHARE_INFO_KEY); }catch(_){}
+      setDraftClearedAt(Date.now()); // 意図的な削除。これ以前のクラウド下書きは自動復元しない
     }
     if(document.querySelectorAll("#cardList .life-card").length===0) addStarterCards();
     goToMain();
   });
   resumeBtn.addEventListener("click",goToMain);
+
+  /* クラウドの下書きを確認（裏で実行。画面表示は止めない） */
+  syncCloudDraft(localSavedAt,()=>{
+    hadDraft=true;
+    resumeBtn.classList.remove("hidden");
+    startBtn.textContent="新しく作成する";
+    try{ renderScheduleUI(); }catch(_){}
+  });
 })();
