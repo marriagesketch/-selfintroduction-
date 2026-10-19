@@ -1257,13 +1257,13 @@ function renderPublicView(shared){
    タブ・サブタブ切り替え
    ============================================================ */
 function switchTab(tab){
-  ["input","preview","settings"].forEach(t=>{
+  ["input","preview"].forEach(t=>{
     document.getElementById(`tab-${t}`).classList.toggle("hidden",t!==tab);
   });
   document.querySelectorAll(".nav-btn").forEach(btn=>{
     btn.classList.toggle("active",btn.dataset.tab===tab);
   });
-  const title={preview:"プレビュー",settings:"設定"};
+  const title={preview:"プレビュー"};
   document.getElementById("appBarTitle").textContent=title[tab]||"作成";
 
   if(tab==="preview"){

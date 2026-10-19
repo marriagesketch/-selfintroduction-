@@ -178,18 +178,13 @@
 
     <!-- プレビュータブ -->
     <div id="tab-preview" class="tab-panel hidden">
-      <button id="sendBtn" class="btn-primary btn-block" type="button">送信する</button>
-      <button id="backToInputBtn" class="btn-ghost btn-block" type="button">入力に戻って編集する</button>
-      <div id="previewContent"></div>
-    </div>
-
-    <!-- 設定タブ -->
-    <div id="tab-settings" class="tab-panel hidden">
-      <div class="settings-panel">
-        <p class="settings-row-label">自動保存について</p>
-        <p class="settings-row-desc">入力・カード追加・カード削除・並び替えのたびに、この端末へ自動的に保存されます。</p>
-        <button id="resetBtn" class="btn-danger" type="button">下書きを削除して最初から作成する</button>
+      <div class="action-grid">
+        <button id="sendBtn" class="btn-primary" type="button">送信</button>
+        <button id="backToInputBtn" class="btn-ghost" type="button">編集に戻る</button>
+        <button id="cloudDraftBtn" class="btn-ghost" type="button">下書き保存</button>
+        <button id="resetBtn" class="btn-clear" type="button">フォームクリア</button>
       </div>
+      <div id="previewContent"></div>
     </div>
 
     <nav class="bottom-nav">
@@ -200,10 +195,6 @@
       <button class="nav-btn" data-tab="preview" type="button">
         <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
         <span>プレビュー</span>
-      </button>
-      <button class="nav-btn" data-tab="settings" type="button">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.4-2-3.4-2.3.8a7.7 7.7 0 0 0-1.8-1l-.3-2.4h-4l-.3 2.4a7.7 7.7 0 0 0-1.8 1l-2.3-.8-2 3.4 2 1.4a7.6 7.6 0 0 0 0 2l-2 1.4 2 3.4 2.3-.8a7.7 7.7 0 0 0 1.8 1l.3 2.4h4l.3-2.4a7.7 7.7 0 0 0 1.8-1l2.3.8 2-3.4-2-1.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-        <span>設定</span>
       </button>
     </nav>
   </section>

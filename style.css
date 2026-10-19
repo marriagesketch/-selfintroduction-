@@ -601,3 +601,10 @@ textarea{ min-height:72px; resize:vertical; line-height:1.6; }
 #screenshotWatermark.show{
   display:block;
 }
+
+/* プレビュー上部 2×2 ボタン */
+.action-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.action-grid button{ margin:0; width:100%; padding:14px 8px; font-size:15px; font-weight:700; border-radius:var(--radius-pill); cursor:pointer; }
+.action-grid .btn-primary{ padding:14px 8px; }
+.action-grid .btn-clear{ border:1px solid #ddd; background:#fafafa; color:#888; }
+.action-grid button:disabled{ opacity:.6; }
