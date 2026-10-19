@@ -1315,7 +1315,6 @@ function bindEvents(){
   document.querySelectorAll(".sub-switch-btn").forEach(btn=>{
     btn.addEventListener("click",()=>switchSub(btn.dataset.sub));
   });
-  document.getElementById("backToInputBtn").addEventListener("click",()=>switchTab("input"));
   document.getElementById("addPatternBtn").addEventListener("click",addSchedulePattern);
 
   /* ----- 送信ボタン（プレビュー画面上部） ----- */
@@ -1572,6 +1571,17 @@ async function checkFriendship(){
     goToMain();
   });
   resumeBtn.addEventListener("click",goToMain);
+
+  /* 「編集に戻る」：入力画面ではなく、最初の「新しく作成する／続きから作成する」画面へ戻る */
+  document.getElementById("backToInputBtn").addEventListener("click",()=>{
+    saveDraft();
+    hadDraft=true;
+    resumeBtn.classList.remove("hidden");
+    startBtn.textContent="新しく作成する";
+    document.getElementById("screen-main").classList.add("hidden");
+    document.getElementById("screen-top").classList.remove("hidden");
+    window.scrollTo(0,0);
+  });
 
   /* クラウドの下書きを確認（裏で実行。画面表示は止めない） */
   syncCloudDraft(()=>{
