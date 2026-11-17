@@ -638,6 +638,14 @@ function fetchWithTimeout(url, options = {}, ms = 15000) {
   return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
+/* GASの起動待ち（コールドスタート）を、本番の通信より前に済ませておくための軽い呼び出し。
+   結果は使わず、失敗しても何もしない。 */
+function warmUpGas() {
+  try {
+    fetchWithTimeout(`${GAS_ENDPOINT}?action=ping`, { method: "GET" }, 10000).catch(() => {});
+  } catch (_) {}
+}
+
 // 鍵は「ソルト＋LINEユーザーID」のSHA-256。サーバーが持つのはユーザーIDのハッシュ（ownerHash）だけで、
 // この鍵は導出できない。
 async function getDraftCryptoKey(userId) {
@@ -1319,6 +1327,7 @@ function bindEvents(){
 
   /* ----- 送信ボタン（プレビュー画面上部） ----- */
   document.getElementById("sendBtn").addEventListener("click",()=>{
+    warmUpGas(); // 共有モーダルの入力中にGASが眠らないよう、念のため起こしておく
     const modal=document.getElementById("shareModal");
     document.getElementById("shareName").value="";
     modal.classList.remove("hidden");
@@ -1488,6 +1497,7 @@ async function checkFriendship(){
    メイン処理
    ============================================================ */
 (async()=>{
+  warmUpGas(); // 起動直後にGASを先に起こしておく（LIFF初期化と並行）
   const params = new URLSearchParams(location.search);
   let sharedId  = params.get("id");
   let keyBase64 = location.hash ? location.hash.slice(1) : "";
